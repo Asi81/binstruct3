@@ -11,7 +11,6 @@ class Point:
 
 class StreamReadTests(unittest.TestCase):
 
-
     def test_reading_from_bytes(self):
         point = Point.create(b"\x01\x00\x00\x00\x02\x00\x00\x00")
         self.assertEqual(point.x, 1)
@@ -40,16 +39,13 @@ class StreamReadTests(unittest.TestCase):
         self.assertEqual(a.p.x, 0)
         self.assertEqual(a.p.y, 0)
 
-
     def test_insufficient_stream_size_exception(self):
         self.assertRaises(FieldError, Point.create, b"\x01\x00\x00\x00\x02\x00")
-
 
 
 class WriteTests(unittest.TestCase):
 
     def test_wrong_field_exception(self):
-
         @packable
         class A:
             a = int32
@@ -58,26 +54,18 @@ class WriteTests(unittest.TestCase):
             d = chars(12)
 
         a = A()
-        self.assertRaises( FieldError, a.to_bytes)
-
-        a.zeroise()
-        a.b = "123"
         self.assertRaises(FieldError, a.to_bytes)
 
-
     def test_array_error_exception(self):
-
         @packable
         class A:
             g = array(4, int8)
 
         a = A()
-        a.g[:3] = [1,2,3]
+        a.g[:3] = [1, 2, 3]
         self.assertRaises(FieldError, a.to_bytes)
         a.g[3] = 4
         a.to_bytes()
-
-
 
 
 class InitializationTests(unittest.TestCase):
@@ -145,3 +133,67 @@ class InitializationTests(unittest.TestCase):
         self.assertEqual(a.b, 2)
         self.assertEqual(a.c, 7)
         self.assertEqual(a.d, 8)
+
+    def test_set_wrong_val(self):
+
+        @packable
+        class A:
+            a = int32
+            b = int32
+
+        a = A()
+        try:
+            a.b = "123"
+        except FieldError:
+            pass
+        else:
+            self.fail()
+
+    def test_set_wrong_array(self):
+        @packable
+        class A:
+            g = array(4, int8)
+
+        a = A()
+
+        try:
+            a.g = [1, 2, 3, ""]
+        except FieldError:
+            pass
+        else:
+            self.fail()
+
+
+    def todo_test_set_wrong_struct(self):
+        class A:
+            a = int8
+        class B:
+            b = A
+
+        b = B()
+
+        try:
+            b.b = 5
+        except FieldError:
+            pass
+        self.fail()
+
+
+
+    def todo_test_set_wrong_val_in_array(self):
+        # TODO: throwing exception on setting item in array is not implemented
+        @packable
+        class A:
+            g = array(4, int8)
+
+        a = A()
+
+        try:
+            a.g[1:3] = [1, 2, ""] #not implemented
+        except FieldError:
+            pass
+        else:
+            self.fail()
+
+
+

@@ -8,11 +8,11 @@ from typing import Type, Union, Any, Optional
 
 
 
-class PackableError(Exception):
+class Binstruct3Error(Exception):
     pass
 
 
-class FieldError(PackableError):
+class FieldError(Binstruct3Error):
     def __init__(self, field_name, error_msg):
         super().__init__(f"field {field_name}: {error_msg}")
         self.field_name = field_name
@@ -137,14 +137,14 @@ def raw_packer(fmt: str):
                 if len(val) == 1:
                     val = val[0]
             except struct.error as e:
-                raise PackableError(str(e))
+                raise Binstruct3Error(str(e))
             return val
 
         def pack(self, stream, obj):
             try:
                 dat = struct.pack(self._format_str, obj)
             except struct.error as e:
-                raise PackableError(str(e))
+                raise Binstruct3Error(str(e))
             stream.write(dat)
 
         def byte_size(self, obj):
@@ -154,10 +154,11 @@ def raw_packer(fmt: str):
             return self._default_val
 
         def validate_value(self,obj):
-            try:
-                struct.pack(self._format_str, obj)
-            except struct.error as e:
-                raise PackableError(str(e))
+            if obj is not None:
+                try:
+                    struct.pack(self._format_str, obj)
+                except struct.error as e:
+                    raise Binstruct3Error(str(e))
 
     return RawPacker
 
@@ -194,6 +195,11 @@ def struct_packer(cls: Type[Packable]):
         def default_value(self):
             return self.unpack(None)
 
+        def validate_value(self,obj):
+            if not isinstance(obj,cls):
+                raise Binstruct3Error(f"value {str(obj)} is not of {cls.__bases__[0].__name__} class")
+
+
     return StructPacker
 
 
@@ -207,8 +213,8 @@ def array(count: int, obj: Union[Packer, Type[Packer], Type[Packable]]):
             try:
                 for i in range(self._cnt):
                     ret.append(self._packer.unpack(stream))
-            except PackableError as e:
-                raise PackableError(f"element {i}: {str(e)}")
+            except Binstruct3Error as e:
+                raise Binstruct3Error(f"element {i}: {str(e)}")
             return ret
 
         def pack(self, stream, obj):
@@ -218,9 +224,9 @@ def array(count: int, obj: Union[Packer, Type[Packer], Type[Packable]]):
                     val = next(itr)
                     self._packer.pack(stream, val)
                 except StopIteration:
-                    PackableError(f"Incomplete array:  needed {self._cnt} values, present {i} values")
-                except PackableError as e:
-                    raise PackableError(f"element {i}: {str(e)}")
+                    Binstruct3Error(f"Incomplete array:  needed {self._cnt} values, present {i} values")
+                except Binstruct3Error as e:
+                    raise Binstruct3Error(f"element {i}: {str(e)}")
 
 
         def byte_size(self, obj):
@@ -228,6 +234,12 @@ def array(count: int, obj: Union[Packer, Type[Packer], Type[Packable]]):
 
         def default_value(self):
             return [self._packer.default_value() for i in range(self._cnt)]
+
+        def validate_value(self,obj):
+            if len(obj) != self._cnt:
+                raise Binstruct3Error(f"Wrong array size:  needed {self._cnt} values, present {len(obj)} values")
+            for i in range(self._cnt):
+                self._packer.validate_value(obj[i])
 
     return ArrayPacker
 
@@ -237,6 +249,14 @@ class PackerField(Field):
         super().__init__()
         self._packer = obj
 
+
+    def __set__(self, instance, value):
+        try:
+            self._packer.validate_value(value)
+        except Binstruct3Error as e:
+            raise FieldError(self.storage, str(e))
+        setattr(instance, self.storage, value)
+
     def fill(self, instance, inpstream: Optional[Any] = None):
         try:
             if inpstream:
@@ -244,14 +264,14 @@ class PackerField(Field):
             else:
                 val = self._packer.default_value()
             self.__set__(instance, val)
-        except PackableError as e:
+        except Binstruct3Error as e:
             raise FieldError(self.storage, str(e))
 
     def write(self, instance, out_stream):
         try:
             obj = self.__get__(instance, type(instance))
             self._packer.pack(out_stream, obj)
-        except PackableError as e:
+        except Binstruct3Error as e:
             raise FieldError(self.storage, str(e))
 
     def byte_size(self, instance):

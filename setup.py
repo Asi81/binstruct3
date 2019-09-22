@@ -11,7 +11,7 @@ with open(os.path.join(here, 'CHANGES.txt')) as f:
 
 setup(
     name='binstruct3',
-    version='0.5',
+    version='0.51',
     packages=['binstruct3'],
     url='',
     license='',
