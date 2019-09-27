@@ -19,4 +19,5 @@ setup(
     author_email='asi811130@gmail.com',
     description='Library to handle packed structs',
     long_description=README,
+    python_requires='>=3.7',
 )
