@@ -73,7 +73,7 @@ class Packable:
             if isinstance(obj, Field):
                 yield name, obj
 
-    def load(self, stream: Optional[Any] = None):
+    def reload(self, stream: Optional[Any] = None):
         for name, obj in self.fields():
             obj.fill(self, stream)
 
@@ -95,7 +95,7 @@ class Packable:
 
     def zeroise(self):
         c = bytes(self.byte_size())
-        self.load(self.get_stream(c))
+        self.reload(self.get_stream(c))
 
     @staticmethod
     def get_stream(obj):
@@ -104,7 +104,7 @@ class Packable:
         return obj
 
     @classmethod
-    def create(cls, stream, count=1):
+    def load(cls, stream, count=1):
         stream = cls.get_stream(stream)
 
         if not (isinstance(count, int)):
@@ -115,7 +115,7 @@ class Packable:
         ret = []
         for i in range(count):
             obj = cls()
-            obj.load(stream)
+            obj.reload(stream)
             ret.append(obj)
         if count == 1:
             return ret[0]
@@ -181,9 +181,7 @@ def struct_packer(cls: Type[Packable]):
     class StructPacker(Packer):
 
         def unpack(self, stream):
-            obj = cls()
-            obj.load(stream)
-            return obj
+            return cls.load(stream)
 
         def pack(self, stream, obj):
             obj.dump(stream)

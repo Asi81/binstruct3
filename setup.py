@@ -9,9 +9,16 @@ with open(os.path.join(here, 'CHANGES.txt')) as f:
     CHANGES = f.read()
 
 
+requires = []
+
+tests_require = [
+    'pytest',  # includes virtualenv
+]
+
+
 setup(
     name='binstruct3',
-    version='0.51',
+    version='0.52',
     packages=['binstruct3'],
     url='',
     license='',
@@ -20,4 +27,8 @@ setup(
     description='Library to handle packed structs',
     long_description=README,
     python_requires='>=3.7',
+    install_requires=requires,
+    extras_require={
+        'testing': tests_require,
+    },
 )

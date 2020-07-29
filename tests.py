@@ -12,12 +12,12 @@ class Point:
 class StreamReadTests(unittest.TestCase):
 
     def test_reading_from_bytes(self):
-        point = Point.create(b"\x01\x00\x00\x00\x02\x00\x00\x00")
+        point = Point.load(b"\x01\x00\x00\x00\x02\x00\x00\x00")
         self.assertEqual(point.x, 1)
         self.assertEqual(point.y, 2)
 
     def test_reading_multiple_values(self):
-        points = Point.create(b"\x01\x00\x00\x00\x02\x00\x00\x00" * 2, count=2)
+        points = Point.load(b"\x01\x00\x00\x00\x02\x00\x00\x00" * 2, count=2)
         self.assertEqual(len(points), 2)
         for point in points:
             self.assertEqual(point.x, 1)
@@ -40,7 +40,7 @@ class StreamReadTests(unittest.TestCase):
         self.assertEqual(a.p.y, 0)
 
     def test_insufficient_stream_size_exception(self):
-        self.assertRaises(FieldError, Point.create, b"\x01\x00\x00\x00\x02\x00")
+        self.assertRaises(FieldError, Point.load, b"\x01\x00\x00\x00\x02\x00")
 
 
 class WriteTests(unittest.TestCase):
