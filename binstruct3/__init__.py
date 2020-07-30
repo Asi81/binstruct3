@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from typing import Type, Union, Any, Optional
 
 
-
 class Binstruct3Error(Exception):
     pass
 
@@ -37,7 +36,7 @@ class Packer(ABC):
     def default_value(self):
         pass
 
-    def validate_value(self,obj):
+    def validate_value(self, obj):
         pass
 
 
@@ -75,6 +74,7 @@ class Packable:
 
     def reload(self, stream: Optional[Any] = None):
         for name, obj in self.fields():
+            stream = self.get_stream(stream)
             obj.fill(self, stream)
 
     def to_bytes(self):
@@ -122,7 +122,7 @@ class Packable:
         return ret
 
 
-def raw_packer(fmt: str):
+def raw_packer(fmt: str) -> Type[Packer]:
     class RawPacker(Packer):
         _format_str = fmt
         _sz = struct.calcsize(_format_str)
@@ -153,7 +153,7 @@ def raw_packer(fmt: str):
         def default_value(self):
             return self._default_val
 
-        def validate_value(self,obj):
+        def validate_value(self, obj):
             if obj is not None:
                 try:
                     struct.pack(self._format_str, obj)
@@ -173,8 +173,43 @@ int64 = raw_packer("q")
 uint64 = raw_packer("Q")
 
 
-def chars(length: int):
-    return raw_packer(str(length) + "s")
+def chars(byte_size: int, encoding: str = "latin-1", terminate_at_first_zero=True) -> Type[Packer]:
+    cls = raw_packer(str(byte_size) + "s")
+
+    class CharsPacker(cls):
+        def unpack(self, stream):
+            val = cls.unpack(self, stream)
+            val = self._decode(val)
+            return val
+
+        @staticmethod
+        def _decode(val):
+            val = val.decode(encoding)
+            if terminate_at_first_zero:
+                idx = val.find("\x00")
+                return val if idx == -1 else val[:idx]
+            return val.rstrip('\x00')
+
+        @staticmethod
+        def _encode(val):
+            val = val.encode(encoding)
+            if len(val) < byte_size:
+                val += b"\x00" * (byte_size - len(val))
+            return val
+
+        def validate_value(self, obj):
+            if obj is not None:
+                val = self._encode(obj)
+                cls.validate_value(self, val)
+
+        def pack(self, stream, obj):
+            try:
+                val = self._encode(obj)
+                cls.pack(self, stream, val)
+            except Exception as e:
+                raise Binstruct3Error(str(e))
+
+    return CharsPacker
 
 
 def struct_packer(cls: Type[Packable]):
@@ -193,26 +228,25 @@ def struct_packer(cls: Type[Packable]):
         def default_value(self):
             return self.unpack(None)
 
-        def validate_value(self,obj):
-            if not isinstance(obj,cls):
+        def validate_value(self, obj):
+            if not isinstance(obj, cls):
                 raise Binstruct3Error(f"value {str(obj)} is not of {cls.__bases__[0].__name__} class")
-
 
     return StructPacker
 
 
-def array(count: int, obj: Union[Packer, Type[Packer], Type[Packable]]):
+def array(count: int, packer: Union[Packer, Type[Packer], Type[Packable]]):
     class ArrayPacker(Packer):
-        _packer = get_packer(obj)
+        _packer = get_packer(packer)
         _cnt = count
 
         def unpack(self, stream):
             ret = []
-            try:
-                for i in range(self._cnt):
+            for i in range(self._cnt):
+                try:
                     ret.append(self._packer.unpack(stream))
-            except Binstruct3Error as e:
-                raise Binstruct3Error(f"element {i}: {str(e)}")
+                except Binstruct3Error as e:
+                    raise Binstruct3Error(f"element {i}: {str(e)}")
             return ret
 
         def pack(self, stream, obj):
@@ -226,14 +260,13 @@ def array(count: int, obj: Union[Packer, Type[Packer], Type[Packable]]):
                 except Binstruct3Error as e:
                     raise Binstruct3Error(f"element {i}: {str(e)}")
 
-
         def byte_size(self, obj):
             return sum(self._packer.byte_size(x) for x in obj)
 
         def default_value(self):
-            return [self._packer.default_value() for i in range(self._cnt)]
+            return [self._packer.default_value()] * self._cnt
 
-        def validate_value(self,obj):
+        def validate_value(self, obj):
             if len(obj) != self._cnt:
                 raise Binstruct3Error(f"Wrong array size:  needed {self._cnt} values, present {len(obj)} values")
             for i in range(self._cnt):
@@ -246,7 +279,6 @@ class PackerField(Field):
     def __init__(self, obj: Packer):
         super().__init__()
         self._packer = obj
-
 
     def __set__(self, instance, value):
         try:
@@ -296,9 +328,9 @@ def create_field(packer: Packer):
 # to save them in storage
 def packable(cls) -> Type[Packable]:
     # initializing packed fields
-    for name, obj in cls.__dict__.items():
+    for name, val in cls.__dict__.items():
         try:
-            pack = get_packer(obj)
+            pack = get_packer(val)
             fld = create_field(pack)
             setattr(cls, name, fld)
             fld.storage = f"{cls.__name__}.{name}"

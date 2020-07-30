@@ -18,7 +18,7 @@ tests_require = [
 
 setup(
     name='binstruct3',
-    version='0.52',
+    version='0.53',
     packages=['binstruct3'],
     url='',
     license='',

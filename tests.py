@@ -197,3 +197,41 @@ class InitializationTests(unittest.TestCase):
 
 
 
+class CharsTests(unittest.TestCase):
+
+    def test_init_empty_str(self):
+
+        @packable
+        class A:
+            f1 = chars(20, encoding='latin-1')
+            f2 = chars(12, encoding='latin-1')
+
+        a = A()
+        self.assertEqual(a.byte_size() ,32)
+        a.zeroise()
+
+        self.assertEqual(a.f1 ,"")
+        self.assertEqual(a.f2 ,"")
+
+    def test_init_str(self):
+        @packable
+        class A:
+            f1 = chars(5, encoding='latin-1')
+            f2 = chars(3, encoding='latin-1')
+
+        data = b"abc\x00\x00cd\x00"
+        a = A.load(data)
+        self.assertEqual(a.f1 ,"abc")
+        self.assertEqual(a.f2 ,"cd")
+
+        data = b"abc\x00\x00\x00cd\x00"
+        a.reload(data)
+        self.assertEqual(a.f1 ,"abc")
+        self.assertEqual(a.f2 ,"")
+
+
+
+
+
+
+
