@@ -1,9 +1,9 @@
 import unittest
 
-from binstruct3 import packable, int32, int8, array, chars, FieldError
+from binstruct3 import packable, int32, int8, array, chars, FieldError, int16
 
 
-@packable
+@packable(align = 1)
 class Point:
     x = int32(5)
     y = int32(6)
@@ -24,7 +24,7 @@ class StreamReadTests(unittest.TestCase):
             self.assertEqual(point.y, 2)
 
     def test_zeroise_function(self):
-        @packable
+        @packable(align = 1)
         class A:
             a = int8(32)
             p = Point
@@ -46,7 +46,7 @@ class StreamReadTests(unittest.TestCase):
 class WriteTests(unittest.TestCase):
 
     def test_wrong_field_exception(self):
-        @packable
+        @packable(align = 1)
         class A:
             a = int32
             b = int32
@@ -57,7 +57,7 @@ class WriteTests(unittest.TestCase):
         self.assertRaises(FieldError, a.to_bytes)
 
     def test_array_error_exception(self):
-        @packable
+        @packable(align = 1)
         class A:
             g = array(4, int8)
 
@@ -76,7 +76,7 @@ class InitializationTests(unittest.TestCase):
         self.assertEqual(v.y, 6)
 
     def test_empty_val(self):
-        @packable
+        @packable(align = 1)
         class A:
             a = int32
 
@@ -84,7 +84,7 @@ class InitializationTests(unittest.TestCase):
         self.assertEqual(v.a, None)
 
     def test_empty_array(self):
-        @packable
+        @packable(align = 1)
         class A:
             a = array(4, int8)
 
@@ -92,7 +92,7 @@ class InitializationTests(unittest.TestCase):
         self.assertEqual(v.a, [None, ] * 4)
 
     def test_array_defaults(self):
-        @packable
+        @packable(align = 1)
         class A:
             a = array(4, int8(5))
 
@@ -101,7 +101,7 @@ class InitializationTests(unittest.TestCase):
             self.assertEqual(val, 5)
 
     def test_autoinit_function(self):
-        @packable
+        @packable(align = 1)
         class MyStruct:
             a = int32(1)
             b = int32(2)
@@ -116,7 +116,7 @@ class InitializationTests(unittest.TestCase):
         self.assertEqual(a.d, None)
 
     def test_init_function(self):
-        @packable
+        @packable(align = 1)
         class MyStruct:
             a = int32(1)
             b = int32(2)
@@ -136,7 +136,7 @@ class InitializationTests(unittest.TestCase):
 
     def test_set_wrong_val(self):
 
-        @packable
+        @packable(align = 1)
         class A:
             a = int32
             b = int32
@@ -150,7 +150,7 @@ class InitializationTests(unittest.TestCase):
             self.fail()
 
     def test_set_wrong_array(self):
-        @packable
+        @packable(align = 1)
         class A:
             g = array(4, int8)
 
@@ -182,7 +182,7 @@ class InitializationTests(unittest.TestCase):
 
     def todo_test_set_wrong_val_in_array(self):
         # TODO: throwing exception on setting item in array is not implemented
-        @packable
+        @packable(align = 1)
         class A:
             g = array(4, int8)
 
@@ -201,7 +201,7 @@ class CharsTests(unittest.TestCase):
 
     def test_init_empty_str(self):
 
-        @packable
+        @packable(align = 1)
         class A:
             f1 = chars(20, encoding='latin-1')
             f2 = chars(12, encoding='latin-1')
@@ -214,7 +214,7 @@ class CharsTests(unittest.TestCase):
         self.assertEqual(a.f2 ,"")
 
     def test_init_str(self):
-        @packable
+        @packable(align = 1)
         class A:
             f1 = chars(5, encoding='latin-1')
             f2 = chars(3, encoding='latin-1')
@@ -230,8 +230,100 @@ class CharsTests(unittest.TestCase):
         self.assertEqual(a.f2 ,"")
 
 
+    def test_write_str(self):
+        pass
 
 
 
+class AlignTests(unittest.TestCase):
+
+    def test_init1(self):
+        @packable(align = 4)
+        class A:
+            f1 = int8
+            f2 = int16
+            f3 = int32
+
+        a = A()
+        self.assertEqual(a.byte_size(), 12)
+
+
+    def test_init2(self):
+        @packable(align = 4)
+        class A:
+            f1 = int8
+            f2 = chars(6)
+            f3 = int16
+
+        a = A()
+        self.assertEqual(a.byte_size(), 16)
+
+
+    def test_init3(self):
+
+        @packable(align = 8)
+        class A:
+            f1 = int8
+            f2 = chars(6)
+
+        @packable(align = 4)
+        class B:
+            f1 = array(3,A)
+            f2 = int8
+
+        a = A()
+        self.assertEqual(a.byte_size(), 16)
+
+        b = B()
+        self.assertEqual(b.byte_size(), 52)
+
+
+    def test_read_int(self):
+        @packable(align = 4)
+        class A:
+            f1 = int8
+            f2 = int16
+            f3 = int32
+
+        data = b"\x01HHH\x02\x01HH\x04\x03\x02\x01"
+        a = A.load(data)
+        self.assertEqual(a.f1 ,0x01)
+        self.assertEqual(a.f2 ,0x0102)
+        self.assertEqual(a.f3 ,0x01020304)
+
+
+
+    def test_read_str(self):
+        @packable(align = 4)
+        class A:
+            f1 = chars(3)
+            f2 = chars(3)
+
+        data = b"abc\x00cde\x00"
+        a = A.load(data)
+
+        self.assertEqual(a.f1 ,"abc")
+        self.assertEqual(a.f2 ,"cde")
+
+
+    def test_write_int(self):
+        @packable(align = 4)
+        class A:
+            f1 = int8
+            f2 = int16
+            f3 = int32
+
+        a = A(1, 0x102, 0x102)
+        self.assertEqual(a.to_bytes() ,b"\x01\x00\x00\x00\x02\x01\x00\x00\x02\x01\x00\x00")
+
+
+    def test_write_str(self):
+        @packable(align = 4)
+        class A:
+            f1 = chars(3)
+            f2 = chars(3)
+
+        a = A("abc","cde")
+        self.assertEqual(a.to_bytes() ,b"abc\x00cde\x00")
 
 

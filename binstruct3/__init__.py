@@ -1,10 +1,11 @@
 import inspect
 import io
 import struct
+import locale
 
 # simple storage class descriptor
 from abc import ABC, abstractmethod
-from typing import Type, Union, Any, Optional
+from typing import Type, Union, Any, Optional, BinaryIO, Generator, Tuple
 
 
 class Binstruct3Error(Exception):
@@ -21,15 +22,15 @@ class FieldError(Binstruct3Error):
 class Packer(ABC):
 
     @abstractmethod
-    def unpack(self, stream):
+    def unpack(self, stream: BinaryIO):
         pass
 
     @abstractmethod
-    def pack(self, stream, obj):
+    def pack(self, stream: BinaryIO, obj):
         pass
 
     @abstractmethod
-    def byte_size(self, obj):
+    def byte_size(self, obj) -> int:
         pass
 
     @abstractmethod
@@ -59,38 +60,54 @@ class Field:
     def write(self, instance, outstream):
         pass
 
-    def byte_size(self, instance):
+    def byte_size(self, instance) -> int:
         pass
 
 
 # Packable interface
 class Packable:
 
-    def fields(self):
+    def fields(self) -> Generator[Tuple[str, Field], None, None]:
         supercls = type(self).__mro__[1]
         for name, obj in supercls.__dict__.items():
             if isinstance(obj, Field):
                 yield name, obj
 
-    def reload(self, stream: Optional[Any] = None):
+    def reload(self, stream: Union[BinaryIO, bytes, bytearray, None] = None):
+        align = getattr(self, "_align", 1)
+        stream = self.get_stream(stream)
+        start = stream.tell() if stream else 0
         for name, obj in self.fields():
-            stream = self.get_stream(stream)
             obj.fill(self, stream)
+            if stream:
+                offs = stream.tell() - start
+                skip = (align - offs % align) % align
+                if skip:
+                    stream.read(skip)
 
-    def to_bytes(self):
+    def to_bytes(self) -> bytes:
         out = io.BytesIO()
         self.dump(out)
         return out.getvalue()
 
-    def dump(self, stream):
+    def dump(self, stream: BinaryIO):
+        align = getattr(self, "_align", 1)
         stream = self.get_stream(stream)
+        start = stream.tell()
         for name, obj in self.fields():
             obj.write(self, stream)
+            offs = stream.tell() - start
+            skip = (align - offs % align) % align
+            if skip:
+                stream.write(b"\x00" * skip)
 
-    def byte_size(self):
+    def byte_size(self) -> int:
         ret = 0
+        align = getattr(self, "_align", 1)
         for name, field in self.fields():
             ret += field.byte_size(self)
+            skip = (align - ret % align) % align
+            ret += skip
         return ret
 
     def zeroise(self):
@@ -104,13 +121,13 @@ class Packable:
         return obj
 
     @classmethod
-    def load(cls, stream, count=1):
+    def load(cls, stream: Union[BinaryIO, bytes, bytearray, None], count: int = 1):
         stream = cls.get_stream(stream)
 
         if not (isinstance(count, int)):
             raise ValueError("count should be int")
         if count < 1:
-            raise ValueError("count should be >= 0")
+            raise ValueError("count should be > 0")
 
         ret = []
         for i in range(count):
@@ -173,8 +190,9 @@ int64 = raw_packer("q")
 uint64 = raw_packer("Q")
 
 
-def chars(byte_size: int, encoding: str = "latin-1", terminate_at_first_zero=True) -> Type[Packer]:
+def chars(byte_size: int, encoding: Optional[str] = None, terminate_at_first_zero=True) -> Type[Packer]:
     cls = raw_packer(str(byte_size) + "s")
+    encoding = encoding or locale.getpreferredencoding()
 
     class CharsPacker(cls):
         def unpack(self, stream):
@@ -215,18 +233,18 @@ def chars(byte_size: int, encoding: str = "latin-1", terminate_at_first_zero=Tru
 def struct_packer(cls: Type[Packable]):
     class StructPacker(Packer):
 
-        def unpack(self, stream):
+        def unpack(self, stream: BinaryIO):
             return cls.load(stream)
 
-        def pack(self, stream, obj):
+        def pack(self, stream: BinaryIO, obj):
             obj.dump(stream)
             pass
 
-        def byte_size(self, obj):
+        def byte_size(self, obj) -> int:
             return obj.byte_size()
 
         def default_value(self):
-            return self.unpack(None)
+            return cls.load(None)
 
         def validate_value(self, obj):
             if not isinstance(obj, cls):
@@ -326,37 +344,44 @@ def create_field(packer: Packer):
 
 # returns the subclass of Packable. It has attributes of Field inside, to read, write data from binaries and
 # to save them in storage
-def packable(cls) -> Type[Packable]:
-    # initializing packed fields
-    for name, val in cls.__dict__.items():
-        try:
-            pack = get_packer(val)
-            fld = create_field(pack)
-            setattr(cls, name, fld)
-            fld.storage = f"{cls.__name__}.{name}"
-        except ValueError:
-            pass
 
-    # add Packable mixin to our class
-    class MyPackable(cls, Packable):
 
-        def __init__(self, *args):
+def packable(align: int):
+    def _packable(cls) -> Type[Packable]:
+        # initializing packed fields
+        for name, val in cls.__dict__.items():
+            try:
+                pack = get_packer(val)
+                fld = create_field(pack)
+                setattr(cls, name, fld)
+                fld.storage = f"{cls.__name__}.{name}"
+            except ValueError:
+                pass
 
-            for name, field in self.fields():
-                field.fill(self)
+        # add Packable mixin to our class
+        class MyPackable(cls, Packable):
 
-            if "__init__" in cls.__dict__.keys():
-                super().__init__(*args)
-            else:
-                for (name, field), val in zip(self.fields(), args):
-                    field.__set__(self, val)
+            def __init__(self, *args):
 
-        def __repr__(self):
-            dats = []
-            for nm, obj in cls.__dict__.items():
-                if isinstance(obj, Field):
-                    dats.append(f"{nm} = {obj.__get__(self, type(self))}")
-            vals = ', '.join(dats)
-            return f"{cls.__name__}({vals})"
+                self._align = align
 
-    return MyPackable
+                for name, field in self.fields():
+                    field.fill(self)
+
+                if "__init__" in cls.__dict__.keys():
+                    super().__init__(*args)
+                else:
+                    for (name, field), val in zip(self.fields(), args):
+                        field.__set__(self, val)
+
+            def __repr__(self):
+                dats = []
+                for nm, obj in cls.__dict__.items():
+                    if isinstance(obj, Field):
+                        dats.append(f"{nm} = {obj.__get__(self, type(self))}")
+                vals = ', '.join(dats)
+                return f"{cls.__name__}({vals})"
+
+        return MyPackable
+
+    return _packable
