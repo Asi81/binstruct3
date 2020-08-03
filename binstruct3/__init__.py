@@ -1,3 +1,4 @@
+import copy
 import inspect
 import io
 import struct
@@ -186,6 +187,9 @@ class RawPacker(Packer):
         default_val = default_val or self._default_val
         return RawPacker(self._format_str, default_val)
 
+    def __getitem__(self, item: int) -> "ArrayPacker":
+        return ArrayPacker(self, item, defining=1)
+
 
 int8 = RawPacker("b")
 uint8 = RawPacker("B")
@@ -278,10 +282,11 @@ class StructPacker(Packer):
 
 class ArrayPacker(Packer):
 
-    def __init__(self, obj: Union[Packer, Type[Packable]], count: int):
+    def __init__(self, obj: Union[Packer, Type[Packable]], count: int, defining: int = 0):
         super().__init__()
         self._packer = get_packer(obj)
         self._cnt = count
+        self._defining = defining
 
     def unpack(self, stream):
         ret = []
@@ -315,8 +320,25 @@ class ArrayPacker(Packer):
         for i in range(self._cnt):
             self._packer.validate_value(obj[i])
 
+    def __getitem__(self, item: int) -> "ArrayPacker":
+
+        if self._defining:
+            new_packer = copy.deepcopy(self)
+            packer = new_packer
+            packer._defining += 1
+            for i in range(self._defining - 1):
+                packer = packer._packer
+                packer._defining += 1
+            packer._packer = ArrayPacker(packer._packer, item, defining=1)
+            return new_packer
+
+        return ArrayPacker(self, item, defining=1)
+
     def __call__(self, *args, **kwargs):
         return ArrayPacker(self._packer, self._cnt)
+
+    def __str__(self):
+        return f"ArrayPacker {self._packer}[{self._cnt}]"
 
 
 def array(count: int, packer: Union[Packer, Type[Packable]]):
