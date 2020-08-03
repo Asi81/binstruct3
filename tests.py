@@ -23,6 +23,23 @@ class StreamReadTests(unittest.TestCase):
             self.assertEqual(point.x, 1)
             self.assertEqual(point.y, 2)
 
+    def test_sub_struct_reading(self):
+        @packable(align=1)
+        class A:
+            a = int8(32)
+            p = Point(7)
+
+        a = A()
+        self.assertEqual(a.a, 32)
+        self.assertEqual(a.p.x, 7)
+        self.assertEqual(a.p.y, 6)
+
+        a.reload(b"\x55\x01\x00\x00\x00\x02\x00\x00\x00")
+
+        self.assertEqual(a.a, 0x55)
+        self.assertEqual(a.p.x, 1)
+        self.assertEqual(a.p.y, 2)
+
     def test_zeroise_function(self):
         @packable(align=1)
         class A:
@@ -32,6 +49,22 @@ class StreamReadTests(unittest.TestCase):
         a = A()
         self.assertEqual(a.a, 32)
         self.assertEqual(a.p.x, 5)
+        self.assertEqual(a.p.y, 6)
+
+        a.zeroise()
+        self.assertEqual(a.a, 0)
+        self.assertEqual(a.p.x, 0)
+        self.assertEqual(a.p.y, 0)
+
+    def test_zeroise_function2(self):
+        @packable(align=1)
+        class A:
+            a = int8(32)
+            p = Point(7)
+
+        a = A()
+        self.assertEqual(a.a, 32)
+        self.assertEqual(a.p.x, 7)
         self.assertEqual(a.p.y, 6)
 
         a.zeroise()
@@ -134,6 +167,17 @@ class InitializationTests(unittest.TestCase):
         self.assertEqual(a.c, 7)
         self.assertEqual(a.d, 8)
 
+    def test_struct_init_function(self):
+        @packable(align=1)
+        class A:
+            a = int8(32)
+            p = Point(7, 8)
+
+        a = A()
+        self.assertEqual(a.a, 32)
+        self.assertEqual(a.p.x, 7)
+        self.assertEqual(a.p.y, 8)
+
     def test_set_wrong_val(self):
 
         @packable(align=1)
@@ -224,7 +268,7 @@ class CharsTests(unittest.TestCase):
         data = b"abc\x00\x00\x00cd\x00\x00\x00"
         a.reload(data)
         self.assertEqual(a.f1, "abc")
-        self.assertEqual(a.f2,"")
+        self.assertEqual(a.f2, "")
 
     def test_write_str(self):
         pass

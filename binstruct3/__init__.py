@@ -1,3 +1,4 @@
+import copy
 import inspect
 import io
 import struct
@@ -118,6 +119,10 @@ class Packable:
     def zeroise(self):
         c = bytes(self.byte_size())
         self.reload(self.get_stream(c))
+
+
+    def clone(self) -> "Packable":
+        return copy.deepcopy(self)
 
     @staticmethod
     def get_stream(obj):
@@ -251,12 +256,12 @@ char = CharsPacker()
 
 class StructPacker(Packer):
 
-    def __init__(self, obj: Type[Packable]):
+    def __init__(self, obj: Packable):
         super().__init__()
-        self._cls = obj
+        self._packable = obj.clone()
 
     def unpack(self, stream: BinaryIO):
-        return self._cls.load(stream)
+        return self._packable.__class__.load(stream)
 
     def pack(self, stream: BinaryIO, obj):
         obj.dump(stream)
@@ -266,14 +271,14 @@ class StructPacker(Packer):
         return obj.byte_size()
 
     def default_value(self):
-        return self._cls.load(None)
+        return self._packable.clone()
 
     def validate_value(self, obj):
-        if not isinstance(obj, self._cls):
-            raise Binstruct3Error(f"value {str(obj)} is not of {self._cls.__bases__[0].__name__} class")
+        if not isinstance(obj, self._packable.__class__):
+            raise Binstruct3Error(f"value {str(obj)} is not of {self._packable.__class__.__bases__[0].__name__} class")
 
     def __call__(self, *args, **kwargs):
-        return StructPacker(self._cls)
+        return StructPacker(self._packable)
 
 
 class ArrayPacker(Packer):
@@ -360,11 +365,13 @@ class PackerField(Field):
 def get_packer(obj: Union[Packer, Type[Packer], Type[Packable]]):
     if isinstance(obj, Packer):
         return obj
+    if isinstance(obj, Packable):
+        return StructPacker(obj)
     if inspect.isclass(obj):
         if issubclass(obj, Packer):
             return obj()
         elif issubclass(obj, Packable):
-            return StructPacker(obj)
+            return StructPacker(obj())
     raise ValueError("argument obj has incorrect type")
 
 
