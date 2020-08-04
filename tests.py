@@ -295,6 +295,41 @@ class CharsTests(unittest.TestCase):
         self.assertEqual(a.f1, "abc")
         self.assertEqual(a.f2, "")
 
+
+    def test_string_array(self):
+        @packable(align=1)
+        class A:
+            f1 = char[2][5] (encoding='latin-1')
+
+        data = b"abc\x00\x00cd\x00\x00\x00"
+        a = A.load(data)
+        self.assertEqual(a.f1[0], "abc")
+        self.assertEqual(a.f1[1], "cd")
+
+    def test_string_array2(self):
+        @packable(align=1)
+        class A:
+            f1 = char[1][5] (encoding='latin-1')
+
+        data = b"abc\x00\x00cd\x00\x00\x00"
+        a = A.load(data)
+        self.assertEqual(len(a.f1), 1)
+        self.assertEqual(a.f1[0], "abc")
+
+
+    def test_char_typedef(self):
+        Name = char[16]("Jose", encoding='latin-1')
+
+        @packable(align=1)
+        class Personnel:
+            names = Name[3]
+
+        personnel = Personnel()
+        self.assertEqual(len(personnel.names), 3)
+        self.assertEqual(personnel.byte_size(), 48)
+        for name in personnel.names:
+            self.assertEqual(name, "Jose")
+
     def test_write_str(self):
         pass
 

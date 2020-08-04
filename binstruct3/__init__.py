@@ -208,10 +208,11 @@ uint64 = RawPacker("Q")
 class CharsPacker(RawPacker):
 
     def __init__(self, default_val=None, byte_size: int = 1, encoding: Optional[str] = None,
-                 terminate_at_first_zero: bool = True):
+                 terminate_at_first_zero: bool = True, defining:int = 0):
         super().__init__(format_str=str(byte_size) + "s", default_val=default_val)
         self._encoding = encoding or locale.getdefaultlocale()[1]
         self._terminate_at_first_zero = terminate_at_first_zero
+        self._defining = defining
 
     def unpack(self, stream):
         val = RawPacker.unpack(self, stream)
@@ -243,8 +244,14 @@ class CharsPacker(RawPacker):
         except Exception as e:
             raise Binstruct3Error(str(e))
 
-    def __getitem__(self, byte_size) -> "CharsPacker":
-        return CharsPacker(None, byte_size, self._encoding, self._terminate_at_first_zero)
+    def __getitem__(self, count) -> "CharsPacker":
+        if self._sz == 1 and not self._defining:
+            return CharsPacker(None, count, self._encoding, self._terminate_at_first_zero, defining = 1)
+        if self._defining:
+            packer = CharsPacker(None, count)
+            return ArrayPacker(packer, self._sz)
+
+        return ArrayPacker(self,count, defining=1)
 
     def __call__(self, default_val=None, byte_size=None, encoding: Optional[str] = None, terminate_at_first_zero=None):
         byte_size = byte_size or self._sz
