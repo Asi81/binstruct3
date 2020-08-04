@@ -167,6 +167,31 @@ class InitializationTests(unittest.TestCase):
         self.assertEqual(a.c, 7)
         self.assertEqual(a.d, 8)
 
+    def test_init_multidimensional_array(self):
+        @packable(align=1)
+        class Box:
+            drawers = int8[2][3][4]
+
+        box = Box()
+        self.assertEqual(box.byte_size(), 24)
+        self.assertEqual(len(box.drawers), 2)
+        self.assertEqual(len(box.drawers[0]), 3)
+        self.assertEqual(len(box.drawers[0][0]), 4)
+
+    def test_array_alias(self):
+        Row = int32[5]()
+
+        @packable(align=1)
+        class Market:
+            rows = Row[2]
+
+        market = Market()
+
+        self.assertEqual(market.byte_size(), 40)
+        self.assertEqual(len(market.rows), 2)
+        self.assertEqual(len(market.rows[0]), 5)
+
+
     def test_struct_init_function(self):
         @packable(align=1)
         class A:
