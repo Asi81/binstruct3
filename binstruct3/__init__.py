@@ -287,6 +287,9 @@ class StructPacker(Packer):
         if not isinstance(obj, self._packable.__class__):
             raise Binstruct3Error(f"value {str(obj)} is not of {self._packable.__class__.__bases__[0].__name__} class")
 
+    def __getitem__(self, item: int) -> "ArrayPacker":
+        return ArrayPacker(self, item, defining=1)
+
     def __call__(self, *args, **kwargs):
         return StructPacker(self._packable)
 
@@ -352,7 +355,7 @@ class ArrayPacker(Packer):
         return f"ArrayPacker {self._packer}[{self._cnt}]"
 
 
-def array(count: int, packer: Union[Packer, Type[Packable]]):
+def array(packer: Union[Packer, Type[Packable]], count: int,):
     return ArrayPacker(packer, count)
 
 

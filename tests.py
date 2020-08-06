@@ -83,7 +83,7 @@ class WriteTests(unittest.TestCase):
         class A:
             a = int32
             b = int32
-            c = array(4, int8)
+            c = int8[4]
             d = char[12]
 
         a = A()
@@ -92,7 +92,7 @@ class WriteTests(unittest.TestCase):
     def test_array_error_exception(self):
         @packable(align=1)
         class A:
-            g = array(4, int8)
+            g = int8[4]
 
         a = A()
         a.g[:3] = [1, 2, 3]
@@ -119,7 +119,7 @@ class InitializationTests(unittest.TestCase):
     def test_empty_array(self):
         @packable(align=1)
         class A:
-            a = array(4, int8)
+            a = int8[4]
 
         v = A()
         self.assertEqual(v.a, [None, ] * 4)
@@ -127,7 +127,7 @@ class InitializationTests(unittest.TestCase):
     def test_array_defaults(self):
         @packable(align=1)
         class A:
-            a = array(4, int8(5))
+            a = array(int8(5), 4)
 
         v = A()
         for val in v.a:
@@ -191,7 +191,6 @@ class InitializationTests(unittest.TestCase):
         self.assertEqual(len(market.rows), 2)
         self.assertEqual(len(market.rows[0]), 5)
 
-
     def test_struct_init_function(self):
         @packable(align=1)
         class A:
@@ -221,7 +220,7 @@ class InitializationTests(unittest.TestCase):
     def test_set_wrong_array(self):
         @packable(align=1)
         class A:
-            g = array(4, int8)
+            g = int8[4]
 
         a = A()
 
@@ -251,7 +250,7 @@ class InitializationTests(unittest.TestCase):
         # TODO: throwing exception on setting item in array is not implemented
         @packable(align=1)
         class A:
-            g = array(4, int8)
+            g = int8[4]
 
         a = A()
 
@@ -295,11 +294,10 @@ class CharsTests(unittest.TestCase):
         self.assertEqual(a.f1, "abc")
         self.assertEqual(a.f2, "")
 
-
     def test_string_array(self):
         @packable(align=1)
         class A:
-            f1 = char[2][5] (encoding='latin-1')
+            f1 = char[2][5](encoding='latin-1')
 
         data = b"abc\x00\x00cd\x00\x00\x00"
         a = A.load(data)
@@ -309,13 +307,12 @@ class CharsTests(unittest.TestCase):
     def test_string_array2(self):
         @packable(align=1)
         class A:
-            f1 = char[1][5] (encoding='latin-1')
+            f1 = char[1][5](encoding='latin-1')
 
         data = b"abc\x00\x00cd\x00\x00\x00"
         a = A.load(data)
         self.assertEqual(len(a.f1), 1)
         self.assertEqual(a.f1[0], "abc")
-
 
     def test_char_typedef(self):
         Name = char[16]("Jose", encoding='latin-1')
@@ -364,7 +361,7 @@ class AlignTests(unittest.TestCase):
 
         @packable(align=4)
         class B:
-            f1 = array(3, A)
+            f1 = array(A, 3)
             f2 = int8
 
         a = A()
